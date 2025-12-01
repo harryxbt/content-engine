@@ -4,7 +4,11 @@ Video Generator Module
 Generates TikTok-ready videos with banner overlays from a library of templates.
 """
 
+import os
+import ssl
+import tempfile
 import textwrap
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -145,9 +149,10 @@ def resize_video_to_tiktok(clip: VideoFileClip) -> VideoFileClip:
 def generate_video(
     scenario: str,
     caption: str,
-    library_path: Path,
     output_path: Path,
     font_path: Path,
+    video_url: Optional[str] = None,
+    library_path: Optional[Path] = None,
     trim_start: float = 0,
     trim_end: float = 0,
 ) -> Path:
@@ -157,11 +162,12 @@ def generate_video(
     Args:
         scenario: Name of the video template (e.g., "high-low")
         caption: Text to display in the banner
-        library_path: Path to the video library folder
         output_path: Path where the generated video will be saved
         font_path: Path to the font file
-        trim_start: Seconds to trim from start (default: 5)
-        trim_end: Seconds to trim from end (default: 1)
+        video_url: URL to download the video from (preferred)
+        library_path: Path to the video library folder (fallback)
+        trim_start: Seconds to trim from start (default: 0)
+        trim_end: Seconds to trim from end (default: 0)
 
     Returns:
         Path to the generated video file
@@ -169,68 +175,100 @@ def generate_video(
     Raises:
         VideoNotFoundError: If the scenario video doesn't exist
     """
-    # Find the source video
-    video_file = library_path / f"{scenario}.mp4"
-    if not video_file.is_file():
-        raise VideoNotFoundError(scenario, library_path)
+    temp_video_path = None
 
-    # Load video
-    video = VideoFileClip(str(video_file))
-    original_fps = video.fps
+    if video_url:
+        # Download video from URL to temp file
+        temp_video_path = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+        try:
+            req = urllib.request.Request(
+                video_url,
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            # Create SSL context that doesn't verify certificates (safe for CDN)
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, context=ssl_context) as response:
+                with open(temp_video_path, 'wb') as f:
+                    f.write(response.read())
+        except Exception as e:
+            if os.path.exists(temp_video_path):
+                os.unlink(temp_video_path)
+            raise VideoNotFoundError(scenario, Path(video_url))
+        video_file = temp_video_path
+    elif library_path:
+        # Use local file
+        video_file = library_path / f"{scenario}.mp4"
+        if not video_file.is_file():
+            raise VideoNotFoundError(scenario, library_path)
+        video_file = str(video_file)
+    else:
+        raise ValueError("Either video_url or library_path must be provided")
 
-    # Trim first N seconds and last M seconds
-    total_trim = trim_start + trim_end
-    if video.duration > total_trim:
-        video = video.subclipped(trim_start, video.duration - trim_end)
+    try:
+        # Load video
+        video = VideoFileClip(video_file)
+        original_fps = video.fps
 
-    # Get audio after trim
-    original_audio = video.audio
+        # Trim first N seconds and last M seconds
+        total_trim = trim_start + trim_end
+        if video.duration > total_trim:
+            video = video.subclipped(trim_start, video.duration - trim_end)
 
-    # Resize to TikTok format
-    video = resize_video_to_tiktok(video)
+        # Get audio after trim
+        original_audio = video.audio
 
-    # Create banner
-    banner_array = create_banner_image(caption, font_path)
-    banner_clip = ImageClip(banner_array).with_duration(video.duration)
+        # Resize to TikTok format
+        video = resize_video_to_tiktok(video)
 
-    # Position banner at top (0, 0)
-    banner_clip = banner_clip.with_position((0, 0))
+        # Create banner
+        banner_array = create_banner_image(caption, font_path)
+        banner_clip = ImageClip(banner_array).with_duration(video.duration)
 
-    # Position video with offset from top
-    video = video.with_position((0, VIDEO_TOP_OFFSET))
+        # Position banner at top (0, 0)
+        banner_clip = banner_clip.with_position((0, 0))
 
-    # Create black background
-    background = ColorClip(
-        size=(OUTPUT_WIDTH, OUTPUT_HEIGHT),
-        color=(0, 0, 0)
-    ).with_duration(video.duration)
+        # Position video with offset from top
+        video = video.with_position((0, VIDEO_TOP_OFFSET))
 
-    # Composite: background, then video (offset), then banner on top
-    final = CompositeVideoClip(
-        [background, video, banner_clip],
-        size=(OUTPUT_WIDTH, OUTPUT_HEIGHT)
-    )
+        # Create black background
+        background = ColorClip(
+            size=(OUTPUT_WIDTH, OUTPUT_HEIGHT),
+            color=(0, 0, 0)
+        ).with_duration(video.duration)
 
-    # Add 1-second fade in from black
-    final = final.with_effects([vfx.FadeIn(1.0)])
+        # Composite: background, then video (offset), then banner on top
+        final = CompositeVideoClip(
+            [background, video, banner_clip],
+            size=(OUTPUT_WIDTH, OUTPUT_HEIGHT)
+        )
 
-    # Preserve audio
-    if original_audio is not None:
-        final = final.with_audio(original_audio)
+        # Add 1-second fade in from black
+        final = final.with_effects([vfx.FadeIn(1.0)])
 
-    # Export
-    final.write_videofile(
-        str(output_path),
-        fps=original_fps,
-        codec="libx264",
-        audio_codec="aac",
-        preset="medium",
-        threads=4,
-        logger=None,  # Suppress moviepy progress output
-    )
+        # Preserve audio
+        if original_audio is not None:
+            final = final.with_audio(original_audio)
 
-    # Cleanup
-    video.close()
-    final.close()
+        # Export
+        final.write_videofile(
+            str(output_path),
+            fps=original_fps,
+            codec="libx264",
+            audio_codec="aac",
+            preset="medium",
+            threads=4,
+            logger=None,  # Suppress moviepy progress output
+        )
 
-    return output_path
+        # Cleanup
+        video.close()
+        final.close()
+
+        return output_path
+
+    finally:
+        # Delete temp file if we downloaded from URL
+        if temp_video_path and os.path.exists(temp_video_path):
+            os.unlink(temp_video_path)

@@ -182,11 +182,15 @@ class GenerateVideoRequest(BaseModel):
     """Request body for /generate-video endpoint."""
     scenario: str = Field(
         ...,
-        description="Name of the video template (e.g., 'high-low')"
+        description="Name of the video template (e.g., 'HighLow')"
     )
     caption: str = Field(
         ...,
         description="Caption text to display in the banner"
+    )
+    video_url: Optional[str] = Field(
+        default=None,
+        description="URL to download the source video from (preferred over local library)"
     )
 
 
@@ -420,9 +424,10 @@ async def generate_video_endpoint(request: GenerateVideoRequest):
         generate_video(
             scenario=request.scenario,
             caption=request.caption,
-            library_path=config.library_path,
             output_path=output_path,
             font_path=config.font_path,
+            video_url=request.video_url,
+            library_path=config.library_path if not request.video_url else None,
         )
 
         # Build URL

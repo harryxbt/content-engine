@@ -36,6 +36,8 @@ RUN mkdir -p /app/output
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# Force imageio/moviepy to use system ffmpeg instead of bundled binary
+ENV IMAGEIO_FFMPEG_EXE=/usr/bin/ffmpeg
 ENV NEG_ROOT=/app/negatives
 ENV POS_ROOT=/app/positives
 ENV OUTPUT_DIR=/app/output

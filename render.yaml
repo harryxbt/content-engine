@@ -1,0 +1,39 @@
+# Render Blueprint
+# Deploy with: https://render.com/docs/blueprint-spec
+#
+# Usage:
+# 1. Push this repo to GitHub
+# 2. Connect to Render
+# 3. Create new "Blueprint" and point to this repo
+# 4. Set PUBLIC_BASE_URL env var to your Render URL
+
+services:
+  - type: web
+    name: content-engine
+    runtime: docker
+    plan: starter  # $7/month, or use 'free' tier
+
+    # Health check
+    healthCheckPath: /health
+
+    # Environment variables
+    envVars:
+      - key: PUBLIC_BASE_URL
+        sync: false  # Set manually to your Render URL, e.g., https://content-engine.onrender.com
+
+      # These use defaults from Dockerfile, but can be overridden
+      - key: NEG_ROOT
+        value: /app/negatives
+      - key: POS_ROOT
+        value: /app/positives
+      - key: OUTPUT_DIR
+        value: /app/output
+      - key: FONT_PATH
+        value: /app/fonts/tiktok-sans-scm.ttf
+
+    # Disk for persistent output storage (optional but recommended)
+    # Without this, generated images are lost on redeploy
+    disk:
+      name: output-storage
+      mountPath: /app/output
+      sizeGB: 1

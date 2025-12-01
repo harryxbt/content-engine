@@ -10,6 +10,7 @@ Pillow>=10.0.0
 # Video processing
 moviepy>=2.0.0
 numpy>=1.24.0
+imageio-ffmpeg>=0.4.9
 
 # Environment variables (optional but recommended)
 python-dotenv>=1.0.0

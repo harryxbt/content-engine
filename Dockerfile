@@ -7,11 +7,13 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies for Pillow and MoviePy (ffmpeg)
+# Use ffmpeg from debian-multimedia for better codec support
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo-dev \
     zlib1g-dev \
     libpng-dev \
     ffmpeg \
+    libavcodec-extra \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (layer caching)

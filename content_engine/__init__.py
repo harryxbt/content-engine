@@ -15,12 +15,15 @@ Package structure:
 from .config import Config, get_config
 from .generator import generate_collage, generate_batch
 from .storage import LocalStorageBackend, StorageBackend
+from .video_generator import generate_video, VideoNotFoundError
 
 __all__ = [
     "Config",
     "get_config",
     "generate_collage",
     "generate_batch",
+    "generate_video",
     "LocalStorageBackend",
     "StorageBackend",
+    "VideoNotFoundError",
 ]

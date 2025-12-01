@@ -31,8 +31,9 @@ FONT_PATH           - Path to font file (default: ./fonts/tiktok-sans-scm.ttf)
 API ENDPOINTS
 =============================================================================
 
-GET  /health    - Health check
-POST /generate  - Generate collage batch
+GET  /health          - Health check
+POST /generate        - Generate collage batch
+POST /generate-video  - Generate video with banner overlay
 
 =============================================================================
 EXAMPLE REQUESTS
@@ -64,6 +65,14 @@ With custom batch_id:
         "batch_id": "my-custom-batch"
       }'
 
+Generate Video with Banner:
+    curl -X POST http://localhost:8000/generate-video \\
+      -H "Content-Type: application/json" \\
+      -d '{
+        "scenario": "high-low",
+        "caption": "Follow for more tips! 🔥"
+      }'
+
 =============================================================================
 """
 
@@ -71,6 +80,7 @@ import argparse
 import logging
 import sys
 import traceback
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Literal, Optional
@@ -90,6 +100,7 @@ from content_engine.generator import (
     NoImagesError,
 )
 from content_engine.storage import LocalStorageBackend
+from content_engine.video_generator import generate_video, VideoNotFoundError
 
 # =============================================================================
 # Logging Configuration
@@ -167,6 +178,26 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
+class GenerateVideoRequest(BaseModel):
+    """Request body for /generate-video endpoint."""
+    scenario: str = Field(
+        ...,
+        description="Name of the video template (e.g., 'high-low')"
+    )
+    caption: str = Field(
+        ...,
+        description="Caption text to display in the banner"
+    )
+
+
+class GenerateVideoResponse(BaseModel):
+    """Response body for /generate-video endpoint."""
+    scenario: str
+    caption: str
+    filename: str
+    url: str
+
+
 # =============================================================================
 # Lifespan - Startup/Shutdown Events
 # =============================================================================
@@ -242,6 +273,19 @@ async def config_error_handler(request: Request, exc: ConfigError):
         status_code=500,
         content={
             "error": "CONFIG_ERROR",
+            "detail": str(exc),
+        }
+    )
+
+
+@app.exception_handler(VideoNotFoundError)
+async def video_not_found_handler(request: Request, exc: VideoNotFoundError):
+    """Handle missing video scenario."""
+    logger.error(f"Video not found: {exc.scenario}")
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "VIDEO_NOT_FOUND",
             "detail": str(exc),
         }
     )
@@ -342,6 +386,68 @@ async def generate_collages(request: GenerateRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
+        )
+
+
+@app.post(
+    "/generate-video",
+    response_model=GenerateVideoResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid request"},
+        404: {"model": ErrorResponse, "description": "Video scenario not found"},
+        500: {"model": ErrorResponse, "description": "Server error"},
+    },
+    tags=["Generation"],
+)
+async def generate_video_endpoint(request: GenerateVideoRequest):
+    """
+    Generate a TikTok video with banner overlay from a library template.
+
+    Looks up the video by scenario name in the library folder (e.g., 'high-low' -> library/high-low.mp4),
+    adds a banner with the caption text, and returns the URL to the generated video.
+    """
+    config = get_config()
+
+    logger.info(f"Generate video request: scenario={request.scenario}, caption={request.caption[:50]}...")
+
+    try:
+        # Generate unique filename
+        video_id = uuid.uuid4().hex[:8]
+        filename = f"video_{request.scenario}_{video_id}.mp4"
+        output_path = config.output_dir / filename
+
+        # Generate the video
+        generate_video(
+            scenario=request.scenario,
+            caption=request.caption,
+            library_path=config.library_path,
+            output_path=output_path,
+            font_path=config.font_path,
+        )
+
+        # Build URL
+        url = f"{config.public_base_url}/output/{filename}"
+
+        response = GenerateVideoResponse(
+            scenario=request.scenario,
+            caption=request.caption,
+            filename=filename,
+            url=url,
+        )
+
+        logger.info(f"Generated video: {filename}")
+
+        return response
+
+    except VideoNotFoundError:
+        # Re-raise to be handled by exception handler
+        raise
+
+    except Exception as e:
+        logger.error(f"Video generation error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Video generation failed: {str(e)}"
         )
 
 

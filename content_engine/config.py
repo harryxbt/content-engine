@@ -104,6 +104,12 @@ class Config:
             self.base_dir / "fonts" / "tiktok-sans-scm.ttf"
         )
 
+        self.library_path = self._resolve_path(
+            None,
+            os.environ.get("LIBRARY_PATH"),
+            self.base_dir / "library"
+        )
+
         # Public URL for API responses
         self.public_base_url = (
             public_base_url

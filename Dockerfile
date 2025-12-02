@@ -6,16 +6,22 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for Pillow and MoviePy (ffmpeg)
-# Use ffmpeg from debian-multimedia for better codec support
+# Install system dependencies for Pillow
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo-dev \
     zlib1g-dev \
     libpng-dev \
-    ffmpeg \
-    libavcodec-extra \
     curl \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# Install static ffmpeg build (has all codecs, not the broken Debian version)
+RUN curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/ffmpeg.tar.xz \
+    && tar -xf /tmp/ffmpeg.tar.xz -C /tmp \
+    && mv /tmp/ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/ \
+    && mv /tmp/ffmpeg-*-amd64-static/ffprobe /usr/local/bin/ \
+    && rm -rf /tmp/ffmpeg* \
+    && chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
 
 # Copy requirements first (layer caching)
 COPY requirements.txt .
@@ -37,8 +43,8 @@ RUN mkdir -p /app/output
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-# Force imageio/moviepy to use system ffmpeg instead of bundled binary
-ENV IMAGEIO_FFMPEG_EXE=/usr/bin/ffmpeg
+# Force imageio/moviepy to use static ffmpeg build
+ENV IMAGEIO_FFMPEG_EXE=/usr/local/bin/ffmpeg
 ENV NEG_ROOT=/app/negatives
 ENV POS_ROOT=/app/positives
 ENV OUTPUT_DIR=/app/output

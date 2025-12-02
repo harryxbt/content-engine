@@ -11,7 +11,20 @@ import textwrap
 from pathlib import Path
 from typing import Optional
 
-from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, ColorClip, vfx
+# Force system ffmpeg BEFORE importing moviepy (critical for Railway)
+# This ensures MoviePy uses our static ffmpeg build, not the bundled old version
+if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
+    # Railway has static ffmpeg at /usr/local/bin/ffmpeg
+    # Fall back to system ffmpeg for local development
+    if os.path.exists("/usr/local/bin/ffmpeg"):
+        os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/local/bin/ffmpeg"
+    else:
+        import shutil
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path:
+            os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_path
+
+from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, ColorClip
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
@@ -226,9 +239,13 @@ def generate_video(
         # Resize to TikTok format
         video = resize_video_to_tiktok(video)
 
-        # Create banner
+        # Create banner - set explicit FPS to match video (fixes static frame bug)
         banner_array = create_banner_image(caption, font_path)
-        banner_clip = ImageClip(banner_array).with_duration(video.duration)
+        banner_clip = (
+            ImageClip(banner_array)
+            .with_duration(video.duration)
+            .with_fps(original_fps)
+        )
 
         # Position banner at top (0, 0)
         banner_clip = banner_clip.with_position((0, 0))
@@ -236,11 +253,12 @@ def generate_video(
         # Position video with offset from top
         video = video.with_position((0, VIDEO_TOP_OFFSET))
 
-        # Create black background
-        background = ColorClip(
-            size=(OUTPUT_WIDTH, OUTPUT_HEIGHT),
-            color=(0, 0, 0)
-        ).with_duration(video.duration)
+        # Create black background - set explicit FPS to match video
+        background = (
+            ColorClip(size=(OUTPUT_WIDTH, OUTPUT_HEIGHT), color=(0, 0, 0))
+            .with_duration(video.duration)
+            .with_fps(original_fps)
+        )
 
         # Composite: background, then video (offset), then banner on top
         final = CompositeVideoClip(
@@ -248,14 +266,12 @@ def generate_video(
             size=(OUTPUT_WIDTH, OUTPUT_HEIGHT)
         )
 
-        # Add 1-second fade in from black
-        final = final.with_effects([vfx.FadeIn(1.0)])
-
         # Preserve audio
         if original_audio is not None:
             final = final.with_audio(original_audio)
 
         # Export (use fast preset and single thread to reduce memory on Railway)
+        # -pix_fmt yuv420p ensures compatibility with all players (fixes static frame on some devices)
         final.write_videofile(
             str(output_path),
             fps=original_fps,
@@ -264,6 +280,7 @@ def generate_video(
             preset="ultrafast",
             threads=1,
             logger=None,  # Suppress moviepy progress output
+            ffmpeg_params=["-pix_fmt", "yuv420p"],
         )
 
         # Cleanup

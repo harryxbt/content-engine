@@ -12,14 +12,11 @@ from pathlib import Path
 from typing import Optional
 
 from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, ColorClip, vfx
-from moviepy.config import change_settings
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-# Explicitly set ffmpeg path for MoviePy (Railway uses static build)
-FFMPEG_PATH = os.environ.get("IMAGEIO_FFMPEG_EXE", "/usr/local/bin/ffmpeg")
-if os.path.exists(FFMPEG_PATH):
-    change_settings({"FFMPEG_BINARY": FFMPEG_PATH})
+# Get ffmpeg path from env (Railway uses static build at /usr/local/bin/ffmpeg)
+FFMPEG_PATH = os.environ.get("IMAGEIO_FFMPEG_EXE", "ffmpeg")
 
 
 # Constants

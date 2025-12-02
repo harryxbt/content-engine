@@ -309,6 +309,43 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/debug-ffmpeg", tags=["Health"])
+async def debug_ffmpeg():
+    """Debug endpoint to check ffmpeg configuration."""
+    import subprocess
+    import os
+
+    ffmpeg_env = os.environ.get("IMAGEIO_FFMPEG_EXE", "not set")
+
+    # Check which ffmpeg is being used
+    try:
+        result = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True)
+        which_ffmpeg = result.stdout.strip()
+    except:
+        which_ffmpeg = "error"
+
+    # Check ffmpeg version
+    try:
+        result = subprocess.run(["/usr/local/bin/ffmpeg", "-version"], capture_output=True, text=True)
+        ffmpeg_version = result.stdout.split('\n')[0] if result.returncode == 0 else result.stderr
+    except Exception as e:
+        ffmpeg_version = str(e)
+
+    # Check if library files exist
+    library_files = []
+    library_path = get_config().library_path
+    if library_path and library_path.exists():
+        library_files = [f.name for f in library_path.iterdir()]
+
+    return {
+        "IMAGEIO_FFMPEG_EXE": ffmpeg_env,
+        "which_ffmpeg": which_ffmpeg,
+        "ffmpeg_version": ffmpeg_version,
+        "library_path": str(library_path),
+        "library_files": library_files,
+    }
+
+
 @app.post(
     "/generate",
     response_model=GenerateResponse,

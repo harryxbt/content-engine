@@ -31,10 +31,13 @@ PADDING = 40  # Horizontal padding for text
 
 class VideoNotFoundError(Exception):
     """Raised when a video scenario is not found in the library."""
-    def __init__(self, scenario: str, library_path: Path):
+    def __init__(self, scenario: str, library_path: Path, detail: str = ""):
         self.scenario = scenario
         self.library_path = library_path
-        super().__init__(f"Video '{scenario}.mp4' not found in {library_path}")
+        msg = f"Video '{scenario}.mp4' not found in {library_path}"
+        if detail:
+            msg += f" ({detail})"
+        super().__init__(msg)
 
 
 def create_banner_image(
@@ -195,7 +198,7 @@ def generate_video(
         except Exception as e:
             if os.path.exists(temp_video_path):
                 os.unlink(temp_video_path)
-            raise VideoNotFoundError(scenario, Path(video_url))
+            raise VideoNotFoundError(scenario, video_url, str(e))
         video_file = temp_video_path
     elif library_path:
         # Use local file

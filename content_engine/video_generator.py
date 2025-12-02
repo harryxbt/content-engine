@@ -194,7 +194,8 @@ def generate_video(
             # Verify file was created and has content
             file_size = os.path.getsize(temp_video_path)
             if result.returncode != 0 or file_size < 1000:
-                raise Exception(f"ffmpeg download failed: {result.stderr.decode()[:200]}")
+                stderr = result.stderr.decode()[-500:] if result.stderr else "no stderr"
+                raise Exception(f"ffmpeg exit={result.returncode}, size={file_size}b: {stderr}")
         except Exception as e:
             if os.path.exists(temp_video_path):
                 os.unlink(temp_video_path)

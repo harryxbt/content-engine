@@ -12,8 +12,14 @@ from pathlib import Path
 from typing import Optional
 
 from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, ColorClip, vfx
+from moviepy.config import change_settings
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+
+# Explicitly set ffmpeg path for MoviePy (Railway uses static build)
+FFMPEG_PATH = os.environ.get("IMAGEIO_FFMPEG_EXE", "/usr/local/bin/ffmpeg")
+if os.path.exists(FFMPEG_PATH):
+    change_settings({"FFMPEG_BINARY": FFMPEG_PATH})
 
 
 # Constants
@@ -181,7 +187,7 @@ def generate_video(
         temp_video_path = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
         try:
             result = subprocess.run(
-                ['ffmpeg', '-y', '-i', video_url, '-c', 'copy', temp_video_path],
+                [FFMPEG_PATH, '-y', '-i', video_url, '-c', 'copy', temp_video_path],
                 capture_output=True,
                 timeout=120
             )
@@ -248,14 +254,14 @@ def generate_video(
         if original_audio is not None:
             final = final.with_audio(original_audio)
 
-        # Export
+        # Export (use fast preset and single thread to reduce memory on Railway)
         final.write_videofile(
             str(output_path),
             fps=original_fps,
             codec="libx264",
             audio_codec="aac",
-            preset="medium",
-            threads=4,
+            preset="ultrafast",
+            threads=1,
             logger=None,  # Suppress moviepy progress output
         )
 

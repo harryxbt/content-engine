@@ -177,18 +177,18 @@ def generate_video(
     temp_video_path = None
 
     if video_url:
-        # Download video using curl (more reliable than urllib on Railway)
+        # Use ffmpeg to download and remux (handles HTTP better than curl/urllib)
         temp_video_path = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
         try:
             result = subprocess.run(
-                ['curl', '-L', '-s', '-o', temp_video_path, video_url],
+                ['ffmpeg', '-y', '-i', video_url, '-c', 'copy', temp_video_path],
                 capture_output=True,
-                timeout=60
+                timeout=120
             )
-            # Verify file was downloaded and has content
+            # Verify file was created and has content
             file_size = os.path.getsize(temp_video_path)
             if result.returncode != 0 or file_size < 1000:
-                raise Exception(f"Download failed: size={file_size}")
+                raise Exception(f"ffmpeg download failed: {result.stderr.decode()[:200]}")
         except Exception as e:
             if os.path.exists(temp_video_path):
                 os.unlink(temp_video_path)

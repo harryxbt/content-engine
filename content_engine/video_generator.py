@@ -5,10 +5,9 @@ Generates TikTok-ready videos with banner overlays from a library of templates.
 """
 
 import os
-import ssl
+import subprocess
 import tempfile
 import textwrap
-import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -178,20 +177,18 @@ def generate_video(
     temp_video_path = None
 
     if video_url:
-        # Download video from URL to temp file
+        # Download video using curl (more reliable than urllib on Railway)
         temp_video_path = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
         try:
-            req = urllib.request.Request(
-                video_url,
-                headers={'User-Agent': 'Mozilla/5.0'}
+            result = subprocess.run(
+                ['curl', '-L', '-s', '-o', temp_video_path, video_url],
+                capture_output=True,
+                timeout=60
             )
-            # Create SSL context that doesn't verify certificates (safe for CDN)
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            with urllib.request.urlopen(req, context=ssl_context) as response:
-                with open(temp_video_path, 'wb') as f:
-                    f.write(response.read())
+            # Verify file was downloaded and has content
+            file_size = os.path.getsize(temp_video_path)
+            if result.returncode != 0 or file_size < 1000:
+                raise Exception(f"Download failed: size={file_size}")
         except Exception as e:
             if os.path.exists(temp_video_path):
                 os.unlink(temp_video_path)

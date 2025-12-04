@@ -12,17 +12,17 @@ from pathlib import Path
 from typing import Optional
 
 # Force system ffmpeg BEFORE importing moviepy (critical for Railway)
-# This ensures MoviePy uses our static ffmpeg build, not the bundled old version
-if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
+# MoviePy 2.0 uses FFMPEG_BINARY (not IMAGEIO_FFMPEG_EXE)
+if not os.environ.get("FFMPEG_BINARY"):
     # Railway has static ffmpeg at /usr/local/bin/ffmpeg
     # Fall back to system ffmpeg for local development
     if os.path.exists("/usr/local/bin/ffmpeg"):
-        os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/local/bin/ffmpeg"
+        os.environ["FFMPEG_BINARY"] = "/usr/local/bin/ffmpeg"
     else:
         import shutil
         ffmpeg_path = shutil.which("ffmpeg")
         if ffmpeg_path:
-            os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_path
+            os.environ["FFMPEG_BINARY"] = ffmpeg_path
 
 from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, ColorClip
 from PIL import Image, ImageDraw, ImageFont

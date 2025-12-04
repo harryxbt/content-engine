@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
-COPY package.json ./
+COPY package.json package-lock.json ./
 
 # Install Node dependencies
-RUN npm install --production
+RUN npm ci --production
 
 # Copy application code
 COPY server.js ./

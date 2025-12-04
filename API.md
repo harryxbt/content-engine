@@ -44,9 +44,34 @@ Content-Type: application/json
   "scenario": "HighLow",
   "caption": "POV: you and your bro are locking in this winter",
   "filename": "video_HighLow_cab7d47a.mp4",
-  "url": "https://content-engine-production-ce86.up.railway.app/output/video_HighLow_cab7d47a.mp4"
+  "url": "https://content-engine-production-ce86.up.railway.app/output/video_HighLow_cab7d47a.mp4",
+  "_meta": {
+    "requestId": "abc12345",
+    "timestamp": "2025-12-04T12:00:00.000Z",
+    "durationMs": 6500,
+    "steps": [
+      {"step": "ffprobe", "durationMs": 200},
+      {"step": "ffmpeg", "durationMs": 6200}
+    ],
+    "videoDurationSec": 30
+  }
 }
 ```
+
+---
+
+## Response Metadata (`_meta`)
+
+All responses include a `_meta` object for tracking and debugging:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `requestId` | string | Unique 8-char ID for this request |
+| `timestamp` | string | ISO timestamp when request started |
+| `durationMs` | number | Total processing time in milliseconds |
+| `steps` | array | Breakdown of processing steps with timing |
+| `videoDurationSec` | number | Duration of output video (success only) |
+| `failedStep` | string | Which step failed (errors only) |
 
 ---
 
@@ -56,7 +81,13 @@ All errors return this format:
 ```json
 {
   "error": "ERROR_CODE",
-  "detail": "Human readable message"
+  "detail": "Human readable message",
+  "_meta": {
+    "requestId": "abc12345",
+    "timestamp": "2025-12-04T12:00:00.000Z",
+    "durationMs": 150,
+    "failedStep": "ffmpeg"
+  }
 }
 ```
 
@@ -72,9 +103,23 @@ All errors return this format:
 ```json
 {
   "error": "VIDEO_NOT_FOUND",
-  "detail": "Video 'Unknown.mp4' not found in library"
+  "detail": "Video 'Unknown.mp4' not found in library",
+  "_meta": {
+    "requestId": "def67890",
+    "timestamp": "2025-12-04T12:00:00.000Z",
+    "durationMs": 5,
+    "failedStep": "lookup"
+  }
 }
 ```
+
+### Failed Steps Reference
+
+| `failedStep` | Description |
+|--------------|-------------|
+| `validate` | Missing required parameters |
+| `lookup` | Video file not found in library |
+| `ffmpeg` | Video processing/encoding failed |
 
 ---
 
@@ -101,10 +146,30 @@ All errors return this format:
 - If exists: Handle error based on `$json.error` code
 - If not: Video generated successfully
 
+### Useful n8n Expressions
+
+| Expression | Description |
+|------------|-------------|
+| `{{ $json.url }}` | Video download URL |
+| `{{ $json.error }}` | Error code (null on success) |
+| `{{ $json._meta.requestId }}` | Request ID for debugging |
+| `{{ $json._meta.durationMs }}` | Processing time (ms) |
+| `{{ $json._meta.failedStep }}` | Which step failed (errors) |
+
 ### Example n8n IF Node Condition
 ```
 {{ $json.error }} is not empty → Error path
 {{ $json.url }} is not empty → Success path
+```
+
+### Logging in n8n Code Node
+```javascript
+// Access metadata for logging
+const meta = $json._meta;
+console.log(`[${meta.requestId}] Completed in ${meta.durationMs}ms`);
+if ($json.error) {
+  console.error(`[${meta.requestId}] Failed at: ${meta.failedStep}`);
+}
 ```
 
 ---

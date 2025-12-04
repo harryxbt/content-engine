@@ -7,6 +7,13 @@ const { generateVideo } = require('./lib/videoGenerator');
 const app = express();
 app.use(express.json());
 
+// Request ID middleware
+app.use((req, res, next) => {
+  req.requestId = uuidv4().substring(0, 8);
+  req.startTime = Date.now();
+  next();
+});
+
 // Config
 const PORT = process.env.PORT || 8000;
 const OUTPUT_DIR = process.env.OUTPUT_DIR || './output';
@@ -59,27 +66,53 @@ app.get('/debug-ffmpeg', async (req, res) => {
 // Generate video endpoint
 app.post('/generate-video', async (req, res) => {
   const { scenario, caption, video_url } = req.body;
+  const requestId = req.requestId;
+  const timestamp = new Date().toISOString();
+
+  // Structured log helper
+  const log = (level, msg, data = {}) => {
+    console.log(JSON.stringify({
+      level,
+      requestId,
+      timestamp: new Date().toISOString(),
+      msg,
+      ...data
+    }));
+  };
+
+  // Helper to build _meta
+  const buildMeta = (extra = {}) => ({
+    requestId,
+    timestamp,
+    durationMs: Date.now() - req.startTime,
+    ...extra
+  });
 
   if (!scenario || !caption) {
+    log('warn', 'Missing required parameters', { scenario: !!scenario, caption: !!caption });
     return res.status(400).json({
       error: 'MISSING_PARAMS',
-      detail: 'scenario and caption are required'
+      detail: 'scenario and caption are required',
+      _meta: buildMeta({ failedStep: 'validate' })
     });
   }
 
-  console.log(`[generate-video] scenario=${scenario}, caption="${caption.substring(0, 50)}..."`);
+  log('info', 'Starting video generation', { scenario, captionLength: caption.length });
 
   try {
     // Determine input video path
     let inputPath;
     if (video_url) {
       inputPath = video_url;
+      log('info', 'Using external video URL', { video_url });
     } else {
       inputPath = path.join(LIBRARY_PATH, `${scenario}.mp4`);
       if (!fs.existsSync(inputPath)) {
+        log('error', 'Video not found in library', { scenario, path: inputPath });
         return res.status(404).json({
           error: 'VIDEO_NOT_FOUND',
-          detail: `Video '${scenario}.mp4' not found in library`
+          detail: `Video '${scenario}.mp4' not found in library`,
+          _meta: buildMeta({ failedStep: 'lookup' })
         });
       }
     }
@@ -89,8 +122,8 @@ app.post('/generate-video', async (req, res) => {
     const filename = `video_${scenario}_${videoId}.mp4`;
     const outputPath = path.join(OUTPUT_DIR, filename);
 
-    // Generate the video
-    await generateVideo({
+    // Generate the video (now returns { outputPath, metrics })
+    const result = await generateVideo({
       inputPath,
       outputPath,
       caption,
@@ -99,20 +132,29 @@ app.post('/generate-video', async (req, res) => {
 
     const url = `${PUBLIC_BASE_URL}/output/${filename}`;
 
-    console.log(`[generate-video] Success: ${filename}`);
+    log('info', 'Video generation complete', {
+      filename,
+      durationMs: result.metrics.totalDurationMs,
+      videoDurationSec: result.metrics.videoDurationSec
+    });
 
     res.json({
       scenario,
       caption,
       filename,
-      url
+      url,
+      _meta: buildMeta({
+        steps: result.metrics.steps,
+        videoDurationSec: result.metrics.videoDurationSec
+      })
     });
 
   } catch (error) {
-    console.error('[generate-video] Error:', error);
+    log('error', 'Video generation failed', { error: error.message });
     res.status(500).json({
       error: 'VIDEO_GENERATION_FAILED',
-      detail: error.message
+      detail: error.message,
+      _meta: buildMeta({ failedStep: 'ffmpeg' })
     });
   }
 });

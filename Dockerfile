@@ -23,6 +23,8 @@ COPY server.js ./
 COPY lib/ ./lib/
 COPY fonts/ ./fonts/
 COPY library/ ./library/
+COPY negatives/ ./negatives/
+COPY positives/ ./positives/
 
 # Create output directory
 RUN mkdir -p /app/output
@@ -32,6 +34,8 @@ ENV NODE_ENV=production
 ENV OUTPUT_DIR=/app/output
 ENV LIBRARY_PATH=/app/library
 ENV FONT_PATH=/app/fonts/tiktok-sans-scm.ttf
+ENV NEG_ROOT=/app/negatives
+ENV POS_ROOT=/app/positives
 
 # Expose port
 EXPOSE 8000
